@@ -1,0 +1,39 @@
+{
+  "name": "linkedin",
+  "version": "1.0.0",
+  "description": "MUSE-PoC: Semantic Candidate Search",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "scripts": {
+    "generate": "ts-node --transpile-only scripts/generate.ts",
+    "index": "ts-node --transpile-only scripts/index.ts",
+    "search": "ts-node --transpile-only scripts/search.ts",
+    "eval:generate": "ts-node --transpile-only scripts/evalGenerate.ts",
+    "eval:generate:quick": "ts-node --transpile-only scripts/evalGenerateQuick.ts",
+    "eval:collect": "ts-node --transpile-only scripts/evalCollect.ts",
+    "evaluate": "ts-node --transpile-only scripts/evaluate.ts",
+    "tscheck": "npx tsc --noEmit 2>&1",
+    "test": "jest"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ]
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "faiss-node": "^0.5.1",
+    "openai": "^6.44.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.43",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
+  }
+}
