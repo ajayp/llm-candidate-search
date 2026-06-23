@@ -75,38 +75,39 @@ By introducing **HyDE**, GPT-4o-mini generates a synthetic "ideal profile" from 
 
 ## Architecture
 
-```text
-Free-text recruiter query
-  │
-  ▼
-[Stage 1] Query Understanding
-          GPT-4o extracts:
-          - title
-          - seniority
-          - location
-          - required skills
-  │
-  ▼
-[Stage 1b] HyDE Generation
-           GPT-4o-mini generates a synthetic ideal-candidate profile
-  │
-  ▼
-[Stage 2] Retrieval
-          FAISS IVFFlat search
-          + seniority filtering
-          + location filtering
-  │
-  ▼
-[Stage 3] Reranking
-          Cohere cross-encoder scores deep candidate relevance
-  │
-  ▼
-[Stage 4] Candidate Evaluation
-          GPT-4o-mini assesses final fit, applies schemas, and explains ranking
-  │
-  ▼
-Ranked Candidate List
+```mermaid
+flowchart TD
+    A([Free-text recruiter query]) --> B
 
+    B["[Stage 1] Query Understanding
+    ─────────────────────────
+    GPT-4o extracts title, seniority,
+    location, and required skills"]
+
+    B --> C["[Stage 1b] HyDE Generation
+    ─────────────────────────
+    GPT-4o-mini generates a synthetic
+    ideal-candidate profile for embedding"]
+
+    C --> D["[Stage 2] Retrieval
+    ─────────────────────────
+    FAISS IVFFlat ANN search (512-dim)
+    + seniority &amp; location ABM filter
+    600 → ~100 candidates"]
+
+    D --> E["[Stage 3] Reranking
+    ─────────────────────────
+    Cohere cross-encoder scores
+    deep candidate relevance
+    ~100 → 25 candidates"]
+
+    E --> F["[Stage 4] LLM Fit Assessment
+    ─────────────────────────
+    GPT-4o-mini evaluates each candidate:
+    poor / partial / good / excellent
+    Filters poor fits"]
+
+    F --> G([Ranked candidate list])
 ```
 
 ---
