@@ -1,6 +1,5 @@
 import { matchesLocation, matchesSeniority, buildScoredTiers, RetrievalResult } from '../pipeline/retrieval';
 import { CandidateProfile, StructuredQuery } from '../types';
-import { CONFIG } from '../config';
 
 function makeProfile(
   id: string,
@@ -45,41 +44,54 @@ function makeQuery(overrides: Partial<StructuredQuery> = {}): StructuredQuery {
   };
 }
 
-// ─── Fix 1: strictCityFilter ──────────────────────────────────────────────────
+// ─── Fix 1: city vs metro-area location filtering ────────────────────────────
 
-describe('matchesLocation — strictCityFilter', () => {
-  const sfQuery = makeQuery({
-    locationStrict: true,
-    location: { city: 'San Francisco', region: null, country: 'United States' },
+describe('matchesLocation — city vs region', () => {
+  test('metro query (region set): Oakland passes for Bay Area search', () => {
+    const query = makeQuery({
+      locationStrict: true,
+      location: { city: null, region: 'San Francisco Bay Area', country: 'United States' },
+    });
+    expect(matchesLocation(makeProfile('1', 'Oakland', 'United States', 'senior'), query)).toBe(true);
   });
 
-  afterEach(() => {
-    (CONFIG.pipeline as any).strictCityFilter = false;
+  test('specific city query (no region): Oakland is filtered for San Francisco search', () => {
+    const query = makeQuery({
+      locationStrict: true,
+      location: { city: 'San Francisco', region: null, country: 'United States' },
+    });
+    expect(matchesLocation(makeProfile('1', 'Oakland', 'United States', 'senior'), query)).toBe(false);
   });
 
-  test('Oakland passes when strictCityFilter is false (default)', () => {
-    (CONFIG.pipeline as any).strictCityFilter = false;
-    expect(matchesLocation(makeProfile('1', 'Oakland', 'United States', 'senior'), sfQuery)).toBe(true);
+  test('specific city query: San Francisco passes for San Francisco search', () => {
+    const query = makeQuery({
+      locationStrict: true,
+      location: { city: 'San Francisco', region: null, country: 'United States' },
+    });
+    expect(matchesLocation(makeProfile('1', 'San Francisco', 'United States', 'senior'), query)).toBe(true);
   });
 
-  test('Oakland is filtered when strictCityFilter is true', () => {
-    (CONFIG.pipeline as any).strictCityFilter = true;
-    expect(matchesLocation(makeProfile('1', 'Oakland', 'United States', 'senior'), sfQuery)).toBe(false);
-  });
-
-  test('San Francisco passes regardless of strictCityFilter', () => {
-    (CONFIG.pipeline as any).strictCityFilter = true;
-    expect(matchesLocation(makeProfile('1', 'San Francisco', 'United States', 'senior'), sfQuery)).toBe(true);
+  test('specific city query: San Jose is filtered for New York search', () => {
+    const query = makeQuery({
+      locationStrict: true,
+      location: { city: 'New York', region: null, country: 'United States' },
+    });
+    expect(matchesLocation(makeProfile('1', 'San Jose', 'United States', 'senior'), query)).toBe(false);
   });
 
   test('non-strict query passes everyone through', () => {
-    const query = makeQuery({ locationStrict: false, location: { city: 'San Francisco', region: null, country: 'United States' } });
+    const query = makeQuery({
+      locationStrict: false,
+      location: { city: 'New York', region: null, country: 'United States' },
+    });
     expect(matchesLocation(makeProfile('1', 'Tokyo', 'Japan', 'senior'), query)).toBe(true);
   });
 
-  test('wrong country is filtered regardless of city setting', () => {
-    (CONFIG.pipeline as any).strictCityFilter = false;
-    const query = makeQuery({ locationStrict: true, location: { city: null, region: null, country: 'United States' } });
+  test('wrong country is always filtered', () => {
+    const query = makeQuery({
+      locationStrict: true,
+      location: { city: null, region: null, country: 'United States' },
+    });
     expect(matchesLocation(makeProfile('1', 'London', 'United Kingdom', 'senior'), query)).toBe(false);
   });
 });

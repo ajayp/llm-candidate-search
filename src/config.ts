@@ -25,7 +25,6 @@ export const CONFIG = {
     abmMinSurvivors: 10,
     l2TopN: 100,
     finalTopK: 25,
-    strictCityFilter: false,
     guardMaxConcurrency: 5,
     l1MinScore: 0.40,
     l2MinScore: 0.50,
