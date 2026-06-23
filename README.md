@@ -25,7 +25,7 @@ In 2023 I built a recruiting assistant and hit these limits directly. HASS is th
 
 Recruiters rarely search using a handful of isolated keywords. Instead, they describe their ideal candidate in natural language:
 
-> "Licensed nurse practitioner, 3+ years in pediatric care, bilingual Spanish preferred."
+> "Director of Engineering with 8+ years, distributed systems background, New York only."
 
 Traditional search engines struggle with this—keyword search misses semantically equivalent profiles, faceted filters are brittle to construct from free-text, and nuanced qualification fit rarely maps cleanly to structured database fields.
 
