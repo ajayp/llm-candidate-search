@@ -20,7 +20,10 @@ export function matchesLocation(profile: CandidateProfile, query: StructuredQuer
   if (!query.locationStrict) return true;
   if (!query.location.country) return true;
   if (profile.location.country !== query.location.country) return false;
-  if (query.location.city && CONFIG.pipeline.strictCityFilter) {
+  // Enforce city only for specific-city queries (no region set).
+  // Metro area queries (region set, city null) let all country-matched candidates through
+  // and rely on the LLM Guard for geographic nuance.
+  if (query.location.city && !query.location.region) {
     return profile.location.city === query.location.city;
   }
   return true;
