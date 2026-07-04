@@ -1,14 +1,14 @@
 # Hiring Assistant Search System
 
-> **Proof of concept, not a production system.** This is a self-directed research project built to study and replicate the architecture behind LinkedIn's public Hiring Assistant engineering blog posts, at small scale (724 synthetic profiles) using off-the-shelf models. It exists to demonstrate engineering judgment on a real information-retrieval problem, not to be deployed as-is.
+> **Proof of concept, not a production system.** This is a self-directed research project built to study and replicate the architecture behind LinkedIn's public Hiring Assistant engineering blog posts, at small scale (724 synthetic profiles) using off-the-shelf models. It's a scoped exercise in retrieval-system tradeoffs, not something meant to be deployed as-is.
 
 Hiring Assistant Search System (HASS) turns a recruiter's plain-English job description — *"Director of Engineering with 8+ years, distributed systems background, New York only"* — into a ranked list of candidates. It uses the same architecture shape as production semantic search systems: understand the query, retrieve candidates by meaning rather than keyword match, rerank the shortlist, then have an LLM sanity-check each fit.
 
 **What this project demonstrates:**
-- Designing and empirically validating a retrieval pipeline — every major design decision below is backed by a measured before/after, not just asserted
-- Rigorous offline evaluation: a held-out ground-truth set, tracked recall and ranking metrics, reproducible results
-- Diagnosing and fixing real LLM-pipeline failure modes — non-determinism, stages silently disagreeing with each other, confidently invented assumptions — with code and process changes, not just re-prompting
-- Honest documentation of what's actually solved vs. what's a known, documented limitation (see [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix))
+- Every major design decision below is backed by a measured before/after
+- Offline evaluation against a held-out ground-truth set, tracking recall and ranking metrics, reproducible results
+- Diagnosing and fixing real LLM-pipeline failure modes — non-determinism, stages silently disagreeing with each other, confidently invented assumptions — with code and process changes
+- Documents what's actually solved vs. what's a known, documented limitation (see [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix))
 
 **Stack:** TypeScript · FAISS · OpenAI `text-embedding-3-large` · GPT-4o / 4o-mini · Cohere `rerank-v4.0-pro` · OpenAI Batch API
 
@@ -72,7 +72,7 @@ npm run search "Find me an AI RAG LLM enginner who kows psytorch, TS, and semati
 
 `"psytorch"` and `"sematic serch"` get corrected to `"PyTorch"`/`"semantic search"`; `"AI RAG LLM"` gets split into separate skills instead of one glommed string; `"TS"` is left alone and explicitly flagged ambiguous rather than silently guessed as TypeScript — see [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix) for why that distinction matters.
 
-### It's not just an ML-engineer demo
+### Works across job categories
 
 | Query | Job category | Distinguishing skills surfaced |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ npm run search "Find me an AI RAG LLM enginner who kows psytorch, TS, and semati
 Two claims are empirically tested here, not asserted:
 
 1. **HyDE-based retrieval fixes a real, measured embedding-asymmetry recall gap** — R@50 went from 0.287 → 0.442 (see [Results & Deep Dive](#results--deep-dive)).
-2. **Reducing embedding dimensionality for first-stage retrieval costs nothing in ranking quality on a generic embedding model** — +0.5pp NDCG (noise-level), which is consistent with — and arrived at independently before reading — LinkedIn's own rationale for why their fine-tuned MUSE model needs task-specific training to make higher dimensions worth the latency (see [Matryoshka Experiment](#matryoshka-experiment-diminishing-returns-on-embedding-dimensions)).
+2. **Reducing embedding dimensionality for first-stage retrieval costs nothing in ranking quality on a generic embedding model** — +0.5pp NDCG (noise-level), which is consistent with LinkedIn's own rationale for why their fine-tuned MUSE model needs task-specific training to make higher dimensions worth the latency (see [Matryoshka Experiment](#matryoshka-experiment-diminishing-returns-on-embedding-dimensions)).
 
 One scale-driven decision worth flagging up front: this uses **exact (not approximate) nearest-neighbor search**, deliberately, because 724 profiles is far below the scale where ANN's recall/speed tradeoff would actually matter — see the FAISS decision below.
 
