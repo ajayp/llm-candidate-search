@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import { EvalQuery } from '../src/types';
 import { CONFIG } from '../src/config';

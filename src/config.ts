@@ -28,6 +28,7 @@ export const CONFIG = {
     guardMaxConcurrency: 5,
     l1MinScore: 0.40,
     l2MinScore: 0.50,
+    matchStatsTopN: 3,
   },
   data: {
     profileCount: 720,

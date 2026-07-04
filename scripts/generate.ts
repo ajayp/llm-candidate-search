@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import { generateProfiles } from '../src/synthetic/generator';
 import { CONFIG } from '../src/config';

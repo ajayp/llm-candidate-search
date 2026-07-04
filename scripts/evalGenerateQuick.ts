@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import OpenAI from 'openai';
 import { CandidateProfile, EvalQuery, EvalQueryRaw } from '../src/types';

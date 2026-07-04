@@ -42,6 +42,11 @@ export interface StructuredQuery {
 
 export type FitLevel = 'poor' | 'partial' | 'good' | 'excellent';
 
+export interface SkillMatchStat {
+  skill: string;
+  enrichment: number;
+}
+
 export interface SearchResult {
   profile: CandidateProfile;
   l1Score: number;
@@ -49,6 +54,7 @@ export interface SearchResult {
   guardExplanation: string;
   fit: FitLevel;
   facepalm: boolean;
+  distinguishingSkills: SkillMatchStat[];
 }
 
 export interface EvalQuery {

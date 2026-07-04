@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import { CandidateProfile } from '../src/types';
 import { CONFIG } from '../src/config';
