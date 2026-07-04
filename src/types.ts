@@ -37,6 +37,9 @@ export interface StructuredQuery {
   locationStrict: boolean;
   qualifications: string[];
   requiredQualifications: string[];
+  // requiredQualifications entries that are acronym-shaped but not a recognized, unambiguous
+  // expansion (e.g. "TS") — Stage 4 must verify these literally, never guess their meaning.
+  ambiguousQualifications: string[];
   queryText: string;
 }
 

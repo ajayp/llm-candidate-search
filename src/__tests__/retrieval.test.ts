@@ -39,6 +39,7 @@ function makeQuery(overrides: Partial<StructuredQuery> = {}): StructuredQuery {
     locationStrict: false,
     qualifications: [],
     requiredQualifications: [],
+    ambiguousQualifications: [],
     queryText: '',
     ...overrides,
   };

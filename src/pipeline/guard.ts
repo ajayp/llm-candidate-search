@@ -37,7 +37,11 @@ function buildPrompt(result: RerankResult, query: StructuredQuery): string {
     parts.push(`- Location: ${[query.location.city, query.location.region, query.location.country].filter(Boolean).join(', ')}`);
   }
   if (query.requiredQualifications.length > 0) {
-    parts.push(`- Required qualifications: ${query.requiredQualifications.join(', ')}`);
+    const ambiguous = new Set(query.ambiguousQualifications);
+    const annotated = query.requiredQualifications.map((q) =>
+      ambiguous.has(q) ? `${q} (ambiguous abbreviation — verify literally, see rule below)` : q,
+    );
+    parts.push(`- Required qualifications: ${annotated.join(', ')}`);
   }
 
   parts.push(`\nCandidate profile:\n${result.embeddingRecord.profileText}`);
@@ -45,6 +49,7 @@ function buildPrompt(result: RerankResult, query: StructuredQuery): string {
   parts.push(
     '\nEvaluate fit using these STRICT rules:' +
     '\n- Only count a skill if it is explicitly listed in the profile. Never infer or assume skills from related work.' +
+    '\n- For any qualification marked "(ambiguous abbreviation)": its meaning was not resolved upstream because it is genuinely ambiguous (could stand for more than one thing). Check ONLY whether that exact abbreviation appears verbatim in the profile — never guess or substitute what it might stand for (e.g. do not decide "TS" means "TypeScript"). If it does not appear verbatim, mark it not met, but phrase the explanation as unable to confirm the ambiguous requirement, naming it by its written abbreviation — never state a specific technology you inferred for it.' +
     '\n- If no location requirement is listed above, do not evaluate location — it is not a factor for this role.' +
     '\n- If a location requirement is listed, it is a HARD requirement. If the requirement is a metro area or region (e.g. "San Francisco Bay Area", "Greater New York"), any city commonly understood to be within that region counts as a match (e.g. Oakland, Berkeley, San Jose, Fremont all match "San Francisco Bay Area"). Only flag a location gap when the candidate is clearly outside the region.' +
     '\n- Seniority must be an exact match or within ±1 level. Any seniority gap — including overqualified (e.g. VP for a Director role, Staff for a Senior role) — is a gap. A seniority gap of exactly 1 level caps the fit at "partial"; a gap of 2+ levels means "poor".' +
@@ -77,6 +82,8 @@ async function assessCandidate(
       client.chat.completions.create({
         model: CONFIG.openai.chat.guardModel,
         max_tokens: 300,
+        temperature: CONFIG.openai.chat.classificationTemperature,
+        seed: CONFIG.openai.chat.classificationSeed,
         response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: buildPrompt(result, query) }],
       }),
