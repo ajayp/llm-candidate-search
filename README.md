@@ -97,6 +97,7 @@ One scale-driven decision worth flagging up front: this uses **exact (not approx
 - [What This PoC Tries to Prove](#what-this-poc-tries-to-prove)
 - [The Problem](#the-problem)
 - [Key Technical Decisions](#key-technical-decisions)
+- [Query Understanding Techniques Implemented](#query-understanding-techniques-implemented)
 - [Results & Deep Dive](#results--deep-dive)
   - [Matryoshka Experiment](#matryoshka-experiment-diminishing-returns-on-embedding-dimensions)
 - [Architecture](#architecture)
@@ -132,6 +133,18 @@ Traditional search engines struggle with this—keyword search misses semantical
 | **512-dim at L1 / 3072-dim at L2** | Search time and index memory scale with embedding dimension regardless of exact-vs-approximate search. 512-dim keeps first-stage retrieval fast across large corpora; the full dimension is only applied at L2 where you're scoring a small top-N, not the entire index. |
 | **Term-Frequency Explainability (no LLM)** | A second "why this candidate" signal — which of a candidate's skills are statistically overrepresented in the retrieved pool vs. the full corpus — computed with plain term-frequency math, not a model call. Zero marginal cost, zero hallucination risk, sits alongside the LLM guard's explanation rather than replacing it. See [Distinguishing Skills](#distinguishing-skills-statistical-explainability-no-llm). |
 | **Deterministic, Shared Acronym Resolution** | A small static table (not an LLM judgment call) resolves unambiguous abbreviations (`K8s`→Kubernetes) and explicitly flags genuinely ambiguous ones (`TS`) as unresolved — used identically by Stage 1 and Stage 4 so the two can never silently disagree about what an abbreviation means. Does not resolve genuine ambiguity, only makes not-knowing consistent and visible. See [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix). |
+
+---
+
+## Query Understanding Techniques Implemented
+
+| Technique | Implemented? | Where |
+|---|---|---|
+| Semantic query parsing | ✅ | Stage 1 — query understanding (`queryUnderstanding.ts`) |
+| Phrase extraction | ✅ | Stage 1 — compound-phrase splitting, filler-word stripping |
+| Misspelling correction | ✅ | Stage 1 — typo correction (separate from abbreviation handling) |
+| Query rewriting | ✅ | Stage 1b — HyDE synthetic profile generation before embedding |
+| Synonym expansion | ❌ Not implemented | Only narrow, hardcoded acronym resolution exists (`src/acronyms.ts`) — not general synonyms |
 
 ---
 
