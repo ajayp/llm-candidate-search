@@ -10,6 +10,11 @@ export const CONFIG = {
       queryUnderstandingModel: 'gpt-4o',
       guardModel: 'gpt-4o-mini',
       generatorModel: 'gpt-4o-mini',
+      // Applied to the two classification-style calls (query understanding, guard) where
+      // run-to-run consistency matters — not to HyDE generation, which is generative-by-design.
+      // temperature: 0 + a fixed seed is best-effort reproducibility, not a hard guarantee.
+      classificationTemperature: 0,
+      classificationSeed: 42, // arbitrary value — just has to stay fixed so results don't drift between runs
     },
   },
   cohere: {

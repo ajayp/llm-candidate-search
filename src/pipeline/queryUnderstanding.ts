@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { StructuredQuery } from '../types';
 import { CONFIG } from '../config';
 import { withRetry } from '../utils';
+import { resolveQualification } from '../acronyms';
 
 let _client: OpenAI | null = null;
 
@@ -79,6 +80,27 @@ interface ParsedQueryInput {
   requiredQualifications: string[];
 }
 
+export interface ResolvedQualifications {
+  qualifications: string[];
+  requiredQualifications: string[];
+  ambiguousQualifications: string[];
+}
+
+// Deterministic acronym resolution — the model only extracts what was literally said;
+// known-safe expansion happens here, in code, so Stage 1 and Stage 4 can never disagree.
+export function resolveStructuredQualifications(
+  qualifications: string[],
+  requiredQualifications: string[],
+): ResolvedQualifications {
+  const resolvedQualifications = qualifications.map(resolveQualification);
+  const resolvedRequired = requiredQualifications.map(resolveQualification);
+  return {
+    qualifications: resolvedQualifications.map((r) => r.text),
+    requiredQualifications: resolvedRequired.map((r) => r.text),
+    ambiguousQualifications: resolvedRequired.filter((r) => r.ambiguous).map((r) => r.text),
+  };
+}
+
 function buildQueryText(parsed: ParsedQueryInput): string {
   const role = [parsed.seniority, parsed.title].filter(Boolean).join(' ');
   const skills = parsed.requiredQualifications.length > 0
@@ -108,6 +130,8 @@ export async function understandQuery(rawQuery: string): Promise<StructuredQuery
       client.chat.completions.create({
         model: CONFIG.openai.chat.queryUnderstandingModel,
         max_tokens: 1024,
+        temperature: CONFIG.openai.chat.classificationTemperature,
+        seed: CONFIG.openai.chat.classificationSeed,
         response_format: {
           type: 'json_schema',
           json_schema: {
@@ -131,7 +155,8 @@ export async function understandQuery(rawQuery: string): Promise<StructuredQuery
 
               'For any extracted qualification (in either qualifications or requiredQualifications): extract each distinct skill, tool, or technology as its own separate array entry — never combine multiple technologies into one string (e.g. "RAG and LLM experience" produces two entries, "RAG" and "LLM", not one entry "RAG LLM"). ' +
               'Strip filler verbs and phrases like "knows", "has", "is skilled in", "proficient in", "experience with" — extract just the skill or technology name (e.g. "knows PyTorch" → "PyTorch"). Preserve meaningful qualifying words that narrow the requirement itself, not just restate possession (e.g. "NLP background" not just "NLP", "distributed systems experience" not just "distributed systems", "5+ years Python" not just "Python"). ' +
-              'Expand a technical abbreviation to its standard full name only when it is genuinely ambiguous or rarely used in that short form professionally, and you are confident of a single unambiguous meaning (e.g. "TS" → "TypeScript", "K8s" → "Kubernetes"). Do NOT expand widely-used standard abbreviations that professionals already list as-is — keep "NLP", "RAG", "LLM", "SQL", "AWS", "GCP", "API", "ML", "AI" exactly as written. ' +
+              'Correct obvious misspellings of a technology or skill name to its standard, correctly-spelled form (e.g. "psytorch" → "PyTorch", "sematic serch" → "semantic search", "kubernettes" → "Kubernetes") — the recruiter clearly meant a specific, real term and simply misspelled it; this is fixing a typo, not guessing. ' +
+              'This is different from abbreviations, which are NOT misspellings: do not expand, interpret, or guess what an abbreviation might stand for yourself — extract every abbreviation exactly as the recruiter wrote it (e.g. keep "TS" as "TS", not a guess like "TypeScript"). Abbreviation expansion is handled separately, deterministically, after extraction — your job there is only to extract what was literally said, unlike misspellings, which you should still correct. ' +
 
               'For requiredQualifications: include only qualifications that the recruiter explicitly stated in the query. ' +
               'If the title contains one or more specific technology terms (e.g. "RAG engineer", "React developer", "Kubernetes specialist"), add each of those technologies as its own separate required qualification (e.g. title "AI RAG LLM engineer" adds "RAG" and "LLM" as two entries, not "AI RAG LLM" as one). Do not infer other skills implied by the role title (e.g. do not add "JavaScript" just because the title is "frontend engineer"). ' +
@@ -157,7 +182,12 @@ export async function understandQuery(rawQuery: string): Promise<StructuredQuery
   } catch {
     throw new Error(`Query understanding returned unparseable JSON: ${content.slice(0, 200)}`);
   }
-  const queryText = buildQueryText(parsed);
+
+  const { qualifications, requiredQualifications, ambiguousQualifications } =
+    resolveStructuredQualifications(parsed.qualifications, parsed.requiredQualifications);
+
+  const resolvedParsed = { ...parsed, qualifications, requiredQualifications };
+  const queryText = buildQueryText(resolvedParsed);
 
   return {
     raw: rawQuery,
@@ -169,8 +199,9 @@ export async function understandQuery(rawQuery: string): Promise<StructuredQuery
       country: normalizeCountry(parsed.location.country),
     },
     locationStrict: parsed.locationStrict ?? false,
-    qualifications: parsed.qualifications,
-    requiredQualifications: parsed.requiredQualifications,
+    qualifications,
+    requiredQualifications,
+    ambiguousQualifications,
     queryText,
   };
 }

@@ -23,6 +23,7 @@ This is a research PoC on retrieval tradeoffs, not a production system: 724 synt
   - [Matryoshka Experiment](#matryoshka-experiment-diminishing-returns-on-embedding-dimensions)
 - [Architecture](#architecture)
 - [Distinguishing Skills: Statistical Explainability (No LLM)](#distinguishing-skills-statistical-explainability-no-llm)
+- [Acronym Handling: A Documented Limitation, Not a Fix](#acronym-handling-a-documented-limitation-not-a-fix)
 - [Evaluation Methodology](#evaluation-methodology)
 - [Example Sourcing Walkthrough](#example-sourcing-walkthrough)
 - [Future Roadmap](#future-roadmap)
@@ -52,6 +53,7 @@ Traditional search engines struggle with this—keyword search misses semantical
 | **Synthetic Dataset** | Allowed full control over skill, seniority, and location distributions to reliably stress-test edge cases. |
 | **512-dim at L1 / 3072-dim at L2** | Search time and index memory scale with embedding dimension regardless of exact-vs-approximate search. 512-dim keeps first-stage retrieval fast across large corpora; the full dimension is only applied at L2 where you're scoring a small top-N, not the entire index. |
 | **Term-Frequency Explainability (no LLM)** | A second "why this candidate" signal — which of a candidate's skills are statistically overrepresented in the retrieved pool vs. the full corpus — computed with plain term-frequency math, not a model call. Zero marginal cost, zero hallucination risk, sits alongside the LLM guard's explanation rather than replacing it. See [Distinguishing Skills](#distinguishing-skills-statistical-explainability-no-llm). |
+| **Deterministic, Shared Acronym Resolution** | A small static table (not an LLM judgment call) resolves unambiguous abbreviations (`K8s`→Kubernetes) and explicitly flags genuinely ambiguous ones (`TS`) as unresolved — used identically by Stage 1 and Stage 4 so the two can never silently disagree about what an abbreviation means. Does not resolve genuine ambiguity, only makes not-knowing consistent and visible. See [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix). |
 
 ---
 
@@ -187,6 +189,48 @@ Across all three: no crashes, no `NaN`/undefined values, sensible multipliers th
 
 ---
 
+## Acronym Handling: A Documented Limitation, Not a Fix
+
+Recruiter queries are full of abbreviations, and some are genuinely ambiguous — a query like *"knows TS"* could mean TypeScript or Time Series, and there's no way to know which without more context. Testing live surfaced two real failure modes from this:
+
+1. **Stage 1 leaving an abbreviation unresolved is fine — Stage 4 silently guessing one is not.** In one run, Stage 1 correctly left `"TS"` as written, but Stage 4's guard, in a separate LLM call with no visibility into Stage 1's caution, confidently decided on its own that `"TS"` meant TypeScript and penalized every candidate for lacking it — an interpretation nobody asked for, invisible to whoever reads the result.
+2. **A single LLM call isn't reliably consistent even with itself.** Before this fix, the guard could write an explanation naming 2+ missing qualifications while still labeling the candidate `good` — the label and the reasoning behind it simply disagreed.
+
+**What's implemented (`src/acronyms.ts`):** a small, deterministic, shared lookup — not an LLM judgment call — used identically by Stage 1 and Stage 4:
+- Genuinely unambiguous abbreviations (`K8s`→Kubernetes) are expanded in code, once, so both stages see the same resolved term.
+- Abbreviations already standard-as-written (`NLP`, `RAG`, `LLM`, ...) are left alone — expanding these would break matches against profiles that use the same short form.
+- Anything else abbreviation-shaped and unrecognized (`TS`) is flagged `ambiguous` and passed through to Stage 4 with an explicit instruction: verify the literal string only, never substitute a guessed technology, and phrase the explanation around the unresolved abbreviation rather than a confident but invented interpretation.
+
+Separately, Stage 4 now must output a per-qualification checklist (`qualificationChecks`) rather than a single self-reported "missing count" — code computes the count and enforces the `fit` label's consistency with it, rather than trusting the model to self-apply its own stated rules.
+
+**Determinism:** testing this also surfaced a third issue — the same query could classify a qualification as "required" on one run and not on the next, purely from GPT-4o's own sampling randomness, unrelated to any of the above. Both classification calls (Stage 1 query understanding, Stage 4 guard) now run with `temperature: 0` and a fixed `seed`, config-driven via `CONFIG.openai.chat.classificationTemperature`/`classificationSeed`. HyDE generation (Stage 1b) is deliberately left untouched — it's generative-by-design, not a classification call, so determinism isn't the goal there. Note this is best-effort reproducibility, not a hard guarantee.
+
+**Live example — typo correction, filler stripping, compound splitting, ambiguity flagging, and determinism, all together:**
+
+```bash
+npm run search "Find me an AI RAG LLM enginner who kows psytorch, TS, and sematic serch"
+```
+
+```json
+[Stage 1] Done: {
+  "raw": "Find me an AI RAG LLM enginner who kows psytorch, TS, and sematic serch",
+  "title": "AI RAG LLM engineer",
+  "qualifications": ["RAG", "LLM", "PyTorch", "TS", "semantic search"],
+  "requiredQualifications": ["RAG", "LLM", "PyTorch", "TS", "semantic search"],
+  "ambiguousQualifications": ["TS"],
+  "queryText": "AI RAG LLM engineer, with expertise in RAG, LLM, PyTorch, TS, semantic search"
+}
+```
+
+Note everything this one query exercises: `"psytorch"` and `"sematic serch"` are corrected to `"PyTorch"`/`"semantic search"` (typo fix, not a guess); `"AI RAG LLM"` in the title is split into separate `"RAG"`/`"LLM"` entries (compound splitting), not left as one ungrammatical string; `"knows"` never appears in the output (filler stripped); `"TS"` is left exactly as written and explicitly flagged in `ambiguousQualifications` rather than silently guessed as TypeScript (ambiguity handling). Re-ran this exact query 3 times back-to-back — identical output every time, character for character, confirming the `temperature: 0` + fixed `seed` fix actually holds in practice, not just in theory.
+
+**What this does not do: actually resolve ambiguity.** `"TS"` is still `"TS"` — we've made not-knowing consistent and honest across both stages, not resolved. Two paths forward if that's not enough:
+
+- **Interactive clarification** — surface flagged-ambiguous terms back to the recruiter before running the rest of the pipeline (*"did you mean TypeScript or Time Series?"*), matching the real Hiring Assistant's "interactive UX" philosophy of resolving ambiguity with the human before large-scale execution. Requires an actual clarification loop — `scripts/search.ts` is currently one-shot, and `evaluate.ts` runs unattended with no human in the loop.
+- **A skill ontology/knowledge graph** — instead of a static two-way table (known-safe vs. known-expansion vs. ambiguous), a structured ontology could use surrounding query context (title, other required qualifications) to disambiguate with actual confidence — e.g. inferring "TS" likely means TypeScript when co-occurring with "React", or Time Series when co-occurring with "forecasting". This is the next PoC direction if the deterministic-table approach proves too coarse in practice.
+
+---
+
 ## Evaluation Methodology
 
 ### The Corpus & Ground Truth
@@ -260,6 +304,7 @@ Running pipeline...
 | Generic cross-encoder | Recruiter behavioral-specific ranking model |
 | HyDE generation latency cost | Learned query encoder / distillation |
 | Synthetic profiles | Anonymized production-grade profiles |
+| Static acronym table + ambiguity flagging | Skill ontology / knowledge graph for context-aware disambiguation, or interactive recruiter clarification (see [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix)) |
 
 ---
 
