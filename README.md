@@ -1,6 +1,6 @@
-# HASS: Hiring Assistant Search System
+# Hiring Assistant Search System
 
-HASS is an AI-powered candidate search system that converts natural language recruiter job descriptions into structured, ranked candidate matches using multi-stage semantic retrieval, reranking, and LLM-based evaluation.
+Hiring Assistant Search System (HASS) is an AI-powered candidate search system that converts natural language recruiter job descriptions into structured, ranked candidate matches using multi-stage semantic retrieval, reranking, and LLM-based evaluation.
 
 In 2023 I built a recruiting assistant and hit these limits directly. HASS is the version that addresses them.
 
