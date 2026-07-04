@@ -21,35 +21,53 @@ npm run search "Senior ML engineer, Python, NLP background, Bay Area"
 ```text
 [Stage 1] Query understanding...
 [Stage 1] Done: {
+  "raw": "Senior ML engineer, Python, NLP background, Bay Area",
   "title": "ML engineer",
   "seniority": "senior",
-  "location": { "region": "San Francisco Bay Area", "country": "United States" },
+  "location": {
+    "city": null,
+    "region": "San Francisco Bay Area",
+    "country": "United States"
+  },
+  "locationStrict": true,
+  "qualifications": ["Python", "NLP background"],
   "requiredQualifications": ["Python", "NLP background"],
+  "ambiguousQualifications": [],
   "queryText": "senior ML engineer, with expertise in Python, NLP background, based in San Francisco Bay Area"
 }
+[Stage 2] L1 retrieval + ABM...
+[Stage 2] Done: 100 candidates after ABM filter
+[Stage 3] L2 reranking (mode: cohere)...
+[Stage 3] Done: 25 candidates after rerank
+[Stage 4] LLM guard...
+[Stage 4] Done: 10 candidates after guard filter (2 poor fits removed)
+Found 10 candidates in 9.4s
 
 ================================================================================
 
 #1  Priya Nair — Senior Machine Learning Engineer
      senior | Oakland, United States | 7 yrs exp
      Skills: Python, NLP, PyTorch, Transformers, spaCy, Hugging Face, MLflow, SQL, Docker, AWS
-     Distinguishing: Hugging Face (7.4x), MLflow (7.4x), spaCy (7.4x)
-     L1 score: 0.8061  |  L2 score: 0.9817  |  fit assessment: excellent
+     Distinguishing: Hugging Face (7.2x), MLflow (7.2x), spaCy (7.2x)
+     L1 score: 0.8013  |  L2 score: 0.9817  |  fit assessment: excellent
 
-     The candidate meets all requirements: they have seniority as 'Senior',
-     their location in Oakland is within the 'San Francisco Bay Area', they
-     have the required skills in Python and NLP.
+     The candidate meets all requirements: they have the required skills in Python and NLP, and their seniority and location are both a match.
 --------------------------------------------------------------------------------
 
 #2  Aisha Kamara — Senior ML Engineer
      senior | Berkeley, United States | 6 yrs exp
      Skills: Python, NLP, Deep Learning, PyTorch, BERT, LLMs, RAG, Vector Databases, FastAPI, GCP
-     Distinguishing: RAG (7.4x), Vector Databases (7.4x), GCP (3.7x)
-     L1 score: 0.7654  |  L2 score: 0.9734  |  fit assessment: excellent
+     Distinguishing: RAG (7.2x), Vector Databases (7.2x), GCP (3.6x)
+     L1 score: 0.7590  |  L2 score: 0.9734  |  fit assessment: excellent
 
-     The candidate is a Senior ML Engineer, located in the Berkeley area which
-     is part of the San Francisco Bay Area, and meets all required
-     qualifications with expertise in Python and NLP.
+     The candidate meets all requirements: they have the required skills in Python and NLP, and their seniority and location are both a match.
+--------------------------------------------------------------------------------
+
+... (7 more candidates, ranging excellent → good → partial as seniority/skill gaps grow) ...
+
+--------------------------------------------------------------------------------
+
+Total pipeline latency: 9.40s
 ```
 
 `Distinguishing` is a free signal computed alongside the ranking — no LLM call, no extra cost (see [Distinguishing Skills](#distinguishing-skills-statistical-explainability-no-llm)).
