@@ -6,12 +6,14 @@ import { understandQuery } from './queryUnderstanding';
 import { retrieve } from './retrieval';
 import { rerank, rerankCosine } from './reranking';
 import { runGuard } from './guard';
+import { buildBackgroundSkillFrequency, computeSkillEnrichment, topDistinguishingSkills } from './matchStats';
 import fs from 'fs';
 
 export interface PipelineContext {
   profileMap: Map<string, CandidateProfile>;
   embeddingCache: Map<string, EmbeddingRecord>;
   faissIndex: ReturnType<typeof loadIndex>;
+  backgroundSkillFreq: Map<string, number>;
 }
 
 export interface ExtendedSearchResult {
@@ -28,8 +30,9 @@ export function loadPipelineContext(): PipelineContext {
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
   const embeddingCache = loadCache();
   const faissIndex = loadIndex(CONFIG.data.indexPath, CONFIG.data.profileIdMapPath);
+  const backgroundSkillFreq = buildBackgroundSkillFrequency(profiles);
 
-  return { profileMap, embeddingCache, faissIndex };
+  return { profileMap, embeddingCache, faissIndex, backgroundSkillFreq };
 }
 
 export type RankingMode = 'l1' | 'cosine' | 'cohere';
@@ -74,6 +77,8 @@ export async function search(
     return { results: [], l1CandidateIds: [] };
   }
 
+  const skillEnrichment = computeSkillEnrichment(l1Results.map((r) => r.profile), ctx.backgroundSkillFreq);
+
   // Stage 3: L2 re-ranking — mode determines strategy
   const rankingMode = options.rankingMode ?? 'cohere';
   console.log(`[Stage 3] L2 reranking (mode: ${rankingMode})...`);
@@ -99,6 +104,7 @@ export async function search(
       guardExplanation: '',
       fit: 'partial' as const,
       facepalm: false,
+      distinguishingSkills: topDistinguishingSkills(r.profile, skillEnrichment, CONFIG.pipeline.matchStatsTopN),
     }));
   } else {
     console.log('[Stage 4] LLM guard...');
@@ -112,6 +118,7 @@ export async function search(
       guardExplanation: r.guardExplanation,
       fit: r.l2Score < CONFIG.pipeline.l2MinScore ? 'poor' : r.fit,
       facepalm: r.facepalm,
+      distinguishingSkills: topDistinguishingSkills(r.profile, skillEnrichment, CONFIG.pipeline.matchStatsTopN),
     }));
   }
 

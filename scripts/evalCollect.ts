@@ -2,7 +2,6 @@
  * Parse a locally downloaded OpenAI batch output file and merge results into eval_queries.json.
  * Usage: ts-node scripts/evalCollect.ts <output_file.jsonl>
  */
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import { CandidateProfile, EvalQuery, EvalQueryRaw } from '../src/types';
 import { CONFIG } from '../src/config';

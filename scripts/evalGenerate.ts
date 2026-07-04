@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import fs from 'fs';
 import OpenAI from 'openai';
 import { CandidateProfile, EvalQuery, EvalQueryRaw } from '../src/types';
@@ -202,6 +201,14 @@ async function main() {
       continue;
     }
 
+    // Skip if every query in this group already has labels from a prior run
+    // (state.json is deleted on full completion, so a re-invocation would
+    // otherwise resubmit and duplicate every query with fresh, non-deterministic labels)
+    if (group.queryIds.every((id) => completedQueryIds.has(id))) {
+      console.log(`${label} All queries already labeled, skipping.`);
+      continue;
+    }
+
     console.log(`\n${label} Queries: ${group.queryIds.join(', ')}`);
 
     // Submit if not yet submitted
@@ -234,8 +241,12 @@ async function main() {
     }
     const groupResults = parseGroupResults(outputJsonl, group.queryIds, profiles, rawQueries);
 
-    for (const r of groupResults) completedQueryIds.add(r.id);
-    evalQueries.push(...groupResults);
+    for (const r of groupResults) {
+      completedQueryIds.add(r.id);
+      const existingIdx = evalQueries.findIndex((q) => q.id === r.id);
+      if (existingIdx >= 0) evalQueries[existingIdx] = r;
+      else evalQueries.push(r);
+    }
     fs.writeFileSync(CONFIG.data.evalQueriesPath, JSON.stringify(evalQueries, null, 2));
 
     const avgQualified = groupResults.reduce((s, q) => s + q.relevantProfileIds.length, 0) / groupResults.length;

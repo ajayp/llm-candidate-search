@@ -59,7 +59,9 @@ function buildPrompt(result: RerankResult, query: StructuredQuery): string {
     '\n- Role: Director, requires [distributed systems]. Candidate: VP ✗, has distributed systems ✓. → "partial" (seniority off by 1 caps at partial)' +
     '\n- Role: Senior, US, requires [Python, NLP]. Candidate: Senior ✓, SF ✓, no Python ✗, no NLP ✗. → "poor" (2 missing skills)' +
     '\n- Role: Senior, US, requires [Python, NLP]. Candidate: Senior ✓, SF ✓, has Python ✓, has NLP ✓. → "excellent"' +
-    '\n\nRespond with a JSON object with keys "fit" (one of: poor, partial, good, excellent) and "explanation" (1-2 sentences stating exactly which requirements are met and which are missing).'
+    '\n\nRespond with a JSON object with keys "qualificationChecks" (an array with exactly one entry per required qualification listed above, in the same order — each entry an object with "qualification" (the exact string) and "met" (boolean: true only if explicitly evidenced in the candidate profile) — evaluate every required qualification individually, one at a time, before deciding fit), ' +
+    '"fit" (one of: poor, partial, good, excellent — must be consistent with how many qualificationChecks entries have met=false, per the criteria above), ' +
+    'and "explanation" (1-2 sentences stating exactly which requirements are met and which are missing).'
   );
 
   return parts.join('\n');
@@ -85,10 +87,23 @@ async function assessCandidate(
   const text = response.choices[0].message.content ?? '{}';
 
   try {
-    const parsed = JSON.parse(text) as { fit: FitLevel; explanation: string };
+    const parsed = JSON.parse(text) as {
+      fit: FitLevel;
+      explanation: string;
+      qualificationChecks?: { qualification: string; met: boolean }[];
+    };
     const validFits: FitLevel[] = ['poor', 'partial', 'good', 'excellent'];
     if (validFits.includes(parsed.fit) && typeof parsed.explanation === 'string') {
-      return parsed;
+      // Deterministic override: count missing qualifications ourselves from the model's
+      // per-item checklist rather than trusting a self-reported total. A single self-reported
+      // count can itself be wrong (undercounted) with nothing to check it against; a per-item
+      // checklist is auditable — we only need the model to judge one qualification at a time
+      // correctly, and code does the counting and the fit-consistency enforcement.
+      const missingRequiredCount = Array.isArray(parsed.qualificationChecks)
+        ? parsed.qualificationChecks.filter((c) => c.met === false).length
+        : 0;
+      const fit = missingRequiredCount >= 2 ? 'poor' : parsed.fit;
+      return { fit, explanation: parsed.explanation };
     }
   } catch {
     // fall through to fallback

@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv'; dotenv.config({ override: true });
 import { loadPipelineContext, search } from '../src/pipeline/pipeline';
 
 async function main() {
@@ -34,6 +33,10 @@ async function main() {
       `     ${r.profile.seniority} | ${r.profile.location.city}, ${r.profile.location.country} | ${r.profile.yearsOfExperience} yrs exp`,
     );
     console.log(`     Skills: ${r.profile.skills.join(', ')}`);
+    if (r.distinguishingSkills.length > 0) {
+      const skillsStr = r.distinguishingSkills.map((s) => `${s.skill} (${s.enrichment.toFixed(1)}x)`).join(', ');
+      console.log(`     Distinguishing: ${skillsStr}`);
+    }
     console.log(`     L1 score: ${r.l1Score.toFixed(4)}  |  L2 score: ${r.l2Score.toFixed(4)}  |  fit assessment: ${r.fit}`);
     console.log(`\n     ${r.guardExplanation}`);
     console.log('-'.repeat(80));

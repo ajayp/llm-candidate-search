@@ -1,18 +1,18 @@
 {
-  "name": "linkedin",
+  "name": "llm-candidate-search",
   "version": "1.0.0",
-  "description": "MUSE-PoC: Semantic Candidate Search",
+  "description": "Semantic Candidate Search",
   "license": "ISC",
   "author": "",
   "type": "commonjs",
   "scripts": {
-    "generate": "ts-node --transpile-only scripts/generate.ts",
-    "index": "ts-node --transpile-only scripts/index.ts",
-    "search": "ts-node --transpile-only scripts/search.ts",
-    "eval:generate": "ts-node --transpile-only scripts/evalGenerate.ts",
-    "eval:generate:quick": "ts-node --transpile-only scripts/evalGenerateQuick.ts",
-    "eval:collect": "ts-node --transpile-only scripts/evalCollect.ts",
-    "evaluate": "ts-node --transpile-only scripts/evaluate.ts",
+    "generate": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/generate.ts",
+    "index": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/index.ts",
+    "search": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/search.ts",
+    "eval:generate": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/evalGenerate.ts",
+    "eval:generate:quick": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/evalGenerateQuick.ts",
+    "eval:collect": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/evalCollect.ts",
+    "evaluate": "node --env-file-if-exists=.env --require ts-node/register/transpile-only scripts/evaluate.ts",
     "tscheck": "npx tsc --noEmit 2>&1",
     "test": "jest"
   },
@@ -24,7 +24,6 @@
     ]
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
     "faiss-node": "^0.5.1",
     "openai": "^6.44.0"
   },
