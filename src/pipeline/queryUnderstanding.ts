@@ -3,6 +3,7 @@ import { StructuredQuery } from '../types';
 import { CONFIG } from '../config';
 import { withRetry } from '../utils';
 import { resolveQualification } from '../acronyms';
+import { deriveQueryFields } from './queryFields';
 
 let _client: OpenAI | null = null;
 
@@ -102,17 +103,7 @@ export function resolveStructuredQualifications(
 }
 
 function buildQueryText(parsed: ParsedQueryInput): string {
-  const role = [parsed.seniority, parsed.title].filter(Boolean).join(' ');
-  const skills = parsed.requiredQualifications.length > 0
-    ? parsed.requiredQualifications
-    : parsed.qualifications;
-
-  const locationParts = [
-    parsed.location.city,
-    parsed.location.region,
-    parsed.location.country,
-  ].filter(Boolean);
-  const locationPhrase = locationParts.length > 0 ? locationParts[0] : null;
+  const { role, skills, locationPhrase } = deriveQueryFields(parsed);
 
   const parts: string[] = [];
   if (role) parts.push(role);

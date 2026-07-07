@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { StructuredQuery } from '../types';
 import { CONFIG } from '../config';
 import { withRetry } from '../utils';
+import { deriveQueryFields } from './queryFields';
 
 let _client: OpenAI | null = null;
 
@@ -13,17 +14,12 @@ function getClient(): OpenAI {
 export async function generateHyDE(query: StructuredQuery): Promise<string> {
   const client = getClient();
 
-  const role = [query.seniority, query.title].filter(Boolean).join(' ');
-  const skills = query.requiredQualifications.length > 0
-    ? query.requiredQualifications
-    : query.qualifications;
-  const locationParts = [query.location.city, query.location.region, query.location.country].filter(Boolean);
-  const locationPhrase = locationParts.length > 0 ? `based in ${locationParts[0]}` : '';
+  const { role, skills, locationPhrase } = deriveQueryFields(query);
 
   const userPrompt = [
     role && `Role: ${role}`,
     skills.length > 0 && `Required skills: ${skills.join(', ')}`,
-    locationPhrase && `Location: ${locationPhrase}`,
+    locationPhrase && `Location: based in ${locationPhrase}`,
   ]
     .filter(Boolean)
     .join('\n');

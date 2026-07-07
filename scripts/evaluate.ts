@@ -4,6 +4,7 @@ import { CONFIG } from '../src/config';
 import { loadPipelineContext, RankingMode, search } from '../src/pipeline/pipeline';
 import { understandQuery } from '../src/pipeline/queryUnderstanding';
 import { generateHyDE } from '../src/pipeline/hyde';
+import { embedTexts } from '../src/embeddings/client';
 import { computeNDCG, computeRecall } from '../src/utils';
 
 const MODES: RankingMode[] = ['l1', 'cosine', 'cohere'];
@@ -62,9 +63,18 @@ async function main() {
     console.log('[Stage 1b] Generating HyDE...');
     const hydeText = await generateHyDE(structuredQuery);
     console.log('[Stage 1b] HyDE:', hydeText);
+    // Embed once and reuse across all ranking modes below — they all search from the same
+    // HyDE text, so re-embedding per mode was 3x redundant OpenAI calls for identical input.
+    const [fullQueryVector] = await embedTexts([hydeText]);
 
     for (const mode of MODES) {
-      const { results, l1CandidateIds } = await search(eq.raw, ctx, { skipGuard: true, rankingMode: mode, structuredQuery, hydeText });
+      const { results, l1CandidateIds } = await search(eq.raw, ctx, {
+        skipGuard: true,
+        rankingMode: mode,
+        structuredQuery,
+        hydeText,
+        fullQueryVector,
+      });
       const rankedIds = results.map((r) => r.profile.id);
 
       byMode[mode] = {

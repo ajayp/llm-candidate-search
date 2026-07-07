@@ -42,6 +42,9 @@ export interface SearchOptions {
   rankingMode?: RankingMode;
   structuredQuery?: StructuredQuery;
   hydeText?: string;
+  // Precomputed embedding of hydeText — lets callers comparing multiple ranking modes
+  // for the same query (e.g. eval) skip re-embedding identical text on every call.
+  fullQueryVector?: number[];
 }
 
 export async function search(
@@ -68,6 +71,7 @@ export async function search(
     ctx.profileMap,
     ctx.embeddingCache,
     options.hydeText,
+    options.fullQueryVector,
   );
   console.log(`[Stage 2] Done: ${l1Results.length} candidates after ABM filter`);
 
@@ -116,7 +120,7 @@ export async function search(
       l1Score: r.l1Score,
       l2Score: r.l2Score,
       guardExplanation: r.guardExplanation,
-      fit: r.l2Score < CONFIG.pipeline.l2MinScore ? 'poor' : r.fit,
+      fit: r.fit,
       facepalm: r.facepalm,
       distinguishingSkills: topDistinguishingSkills(r.profile, skillEnrichment, CONFIG.pipeline.matchStatsTopN),
     }));

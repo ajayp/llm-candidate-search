@@ -21,10 +21,6 @@ export const CONFIG = {
     rerankingModel: 'rerank-v4.0-pro',
     rerankEndpoint: 'https://api.cohere.com/v2/rerank',
   },
-  faiss: {
-    nlist: 16,
-    nprobe: 16,
-  },
   pipeline: {
     l1TopK: 600,
     abmMinSurvivors: 10,

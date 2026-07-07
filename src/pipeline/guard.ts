@@ -3,6 +3,7 @@ import { FitLevel, StructuredQuery } from '../types';
 import { CONFIG, SENIORITY_RANK } from '../config';
 import { withRetry } from '../utils';
 import { RerankResult } from './reranking';
+import { seniorityTrack } from './retrieval';
 
 export interface GuardResult extends RerankResult {
   guardExplanation: string;
@@ -17,14 +18,17 @@ function getClient(): OpenAI {
   return _client;
 }
 
-function isFacepalm(result: RerankResult, query: StructuredQuery): boolean {
+export function isFacepalm(result: RerankResult, query: StructuredQuery): boolean {
   if (!query.seniority) return false;
   const queryLevel = SENIORITY_RANK[query.seniority];
   const profileLevel = SENIORITY_RANK[result.profile.seniority];
-  if (queryLevel !== undefined && profileLevel !== undefined) {
-    if (Math.abs(queryLevel - profileLevel) >= 2) return true;
-  }
-  return false;
+  if (queryLevel === undefined || profileLevel === undefined) return false;
+  // Cross-track (IC ↔ management) is always a facepalm, same as the ABM seniority
+  // filter in retrieval.ts — a candidate can reach the guard via the seniority-relaxed
+  // tier with a small rank gap but the wrong track (e.g. query "director" vs. a
+  // "principal" IC profile), which numeric distance alone wouldn't catch.
+  if (seniorityTrack(query.seniority) !== seniorityTrack(result.profile.seniority)) return true;
+  return Math.abs(queryLevel - profileLevel) >= 2;
 }
 
 function buildPrompt(result: RerankResult, query: StructuredQuery): string {
@@ -100,23 +104,31 @@ async function assessCandidate(
       qualificationChecks?: { qualification: string; met: boolean }[];
     };
     const validFits: FitLevel[] = ['poor', 'partial', 'good', 'excellent'];
-    if (validFits.includes(parsed.fit) && typeof parsed.explanation === 'string') {
-      // Deterministic override: count missing qualifications ourselves from the model's
-      // per-item checklist rather than trusting a self-reported total. A single self-reported
-      // count can itself be wrong (undercounted) with nothing to check it against; a per-item
-      // checklist is auditable — we only need the model to judge one qualification at a time
-      // correctly, and code does the counting and the fit-consistency enforcement.
-      const missingRequiredCount = Array.isArray(parsed.qualificationChecks)
-        ? parsed.qualificationChecks.filter((c) => c.met === false).length
-        : 0;
-      const fit = missingRequiredCount >= 2 ? 'poor' : parsed.fit;
-      return { fit, explanation: parsed.explanation };
+    if (!validFits.includes(parsed.fit) || typeof parsed.explanation !== 'string') {
+      throw new Error(`missing/invalid "fit" or "explanation" field: ${text.slice(0, 300)}`);
     }
-  } catch {
-    // fall through to fallback
+    // Deterministic override: count missing qualifications ourselves from the model's
+    // per-item checklist rather than trusting a self-reported total. A single self-reported
+    // count can itself be wrong (undercounted) with nothing to check it against; a per-item
+    // checklist is auditable — we only need the model to judge one qualification at a time
+    // correctly, and code does the counting and the fit-consistency enforcement.
+    const missingRequiredCount = Array.isArray(parsed.qualificationChecks)
+      ? parsed.qualificationChecks.filter((c) => c.met === false).length
+      : 0;
+    const fit = missingRequiredCount >= 2 ? 'poor' : parsed.fit;
+    return { fit, explanation: parsed.explanation };
+  } catch (err) {
+    // A broken/unparseable guard response is a real failure, not a legitimate "partial" fit —
+    // log it so it's auditable, and default to excluding the candidate (poor) rather than
+    // silently surfacing raw model output as if it were a genuine assessment.
+    console.error(
+      `[guard] Failed to parse assessment for profile ${result.profile.id}: ${err instanceof Error ? err.message : err}`,
+    );
+    return {
+      fit: 'poor',
+      explanation: 'Guard assessment failed (unparseable model output) — treated as poor fit pending review.',
+    };
   }
-
-  return { fit: 'partial', explanation: text };
 }
 
 export async function runWithConcurrency<T, R>(

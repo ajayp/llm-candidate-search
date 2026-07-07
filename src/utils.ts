@@ -1,3 +1,13 @@
+// OpenAI/Cohere SDK errors carry an HTTP `status`. 429 (rate limit) and 5xx (server-side)
+// are transient — worth retrying. Other 4xx (bad request, auth, schema violation) are
+// permanent — retrying just burns ~30s of exponential backoff before failing anyway.
+// Errors with no status (network failures, timeouts) are treated as retryable.
+function isRetryableError(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status;
+  if (status === undefined) return true;
+  return status === 429 || status >= 500;
+}
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
   maxAttempts = 5,
@@ -9,7 +19,7 @@ export async function withRetry<T>(
       return await fn();
     } catch (err) {
       lastError = err;
-      if (attempt === maxAttempts) break;
+      if (attempt === maxAttempts || !isRetryableError(err)) break;
       const delay = baseDelayMs * Math.pow(2, attempt - 1);
       console.warn(`Attempt ${attempt} failed (${err instanceof Error ? err.message : err}), retrying in ${delay}ms...`);
       await sleep(delay);

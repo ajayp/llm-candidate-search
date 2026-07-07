@@ -20,28 +20,6 @@ export function saveCache(cache: Map<string, EmbeddingRecord>): void {
   fs.writeFileSync(cachePath, JSON.stringify(Array.from(cache.values()), null, 2));
 }
 
-export async function getOrEmbed(
-  profileId: string,
-  profileText: string,
-  cache: Map<string, EmbeddingRecord>,
-): Promise<EmbeddingRecord> {
-  const cached = cache.get(profileId);
-  if (cached) return cached;
-
-  const [fullVector] = await embedTexts([profileText]);
-  const shortVector = fullVector.slice(0, CONFIG.openai.embeddings.shortDims);
-
-  const record: EmbeddingRecord = {
-    profileId,
-    fullVector,
-    shortVector,
-    profileText,
-    embeddedAt: new Date().toISOString(),
-  };
-  cache.set(profileId, record);
-  return record;
-}
-
 export async function embedAllProfiles(
   profiles: Array<{ id: string; text: string }>,
   cache: Map<string, EmbeddingRecord>,
