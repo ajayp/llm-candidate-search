@@ -122,6 +122,7 @@ One scale-driven decision worth flagging up front: this uses **exact (not approx
 - [Distinguishing Skills: Statistical Explainability (No LLM)](#distinguishing-skills-statistical-explainability-no-llm)
 - [Acronym Handling: A Documented Limitation, Not a Fix](#acronym-handling-a-documented-limitation-not-a-fix)
 - [Evaluation Methodology](#evaluation-methodology)
+- [Known Limitations](#known-limitations)
 - [Future Roadmap](#future-roadmap)
 - [Quickstart](#quickstart)
 - [Project Structure](#project-structure)
@@ -349,6 +350,36 @@ To move away from anecdotal validation, I built a controlled testing ecosystem:
 ### LLM-as-a-Judge Bias
 
 Ground-truth labels are LLM-generated (OpenAI Batch API / `evalGenerateQuick.ts`), and the pipeline being scored also runs OpenAI models throughout — a known, unmitigated limitation of LLM-as-a-judge evaluation worth flagging rather than presenting these numbers as judged by an independent standard.
+
+---
+
+## Known Limitations
+
+This PoC replicates the *architecture* of LinkedIn's Hiring Assistant at small scale, not its data, models, or feedback loops. The limitations below are collected in one place; most are discussed in more depth in the linked sections.
+
+### Pipeline limitations
+
+| Limitation | Impact | Details |
+| --- | --- | --- |
+| Ambiguous acronyms (e.g. `TS`) are flagged, not resolved | The guard verifies the literal abbreviation instead of inferring its meaning, which can under-match | [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix) |
+| No region field on profiles (`{ city, country }` only) | Region-level queries like "Bay Area" pass every same-country candidate through the rule filter; membership is judged by the Stage 4 LLM guard | [Location Hierarchy](#location-hierarchy-city-level-rules-region-level-limitation) |
+| No general synonym expansion | Only the hardcoded acronym table exists, so queries phrased with synonyms of profile terms rely on embeddings alone | [Query Understanding Techniques](#query-understanding-techniques-implemented) |
+| Exact `IndexFlatL2` search | Fine at 724 profiles; does not scale to millions without moving to an approximate index and re-tuning recall | [Key Technical Decisions](#key-technical-decisions) |
+| HyDE adds an LLM call to every query | Latency and cost per search | [Results & Deep Dive](#results--deep-dive) |
+
+### Evaluation limitations
+
+- **LLM-as-a-judge bias.** Ground-truth labels and the pipeline under test both use OpenAI models. This is unmitigated, so the metrics are not from an independent standard.
+- **Small, synthetic eval set.** 20 queries over 724 LLM-generated profiles. The HyDE improvement (R@50 0.287 → 0.442) is a valid internal before/after comparison, but it is not evidence of performance on real recruiting data.
+- **Binary relevance labels.** Ground truth is `QUALIFIED` / `NOT_QUALIFIED`, which is coarser than the graded `poor|partial|good|excellent` fit the guard produces. NDCG@10 gets little out of binary relevance.
+
+### Gaps versus LinkedIn's system
+
+- **No fine-tuned retrieval model.** Embeddings are general-purpose, not a fine-tuned dual-tower model.
+- **No recruiter-behavior signal.** Reranking uses a generic Cohere cross-encoder. Nothing is learned from recruiter feedback such as clicks, saves, or outreach.
+- **No production data.** Profiles are synthetic, so real-world noise (sparse profiles, inconsistent titles, multilingual text) is not represented.
+
+See the [Future Roadmap](#future-roadmap) for the intended path past each of these.
 
 ---
 
