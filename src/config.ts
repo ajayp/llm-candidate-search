@@ -34,12 +34,12 @@ export const CONFIG = {
   data: {
     profileCount: 720,
     profilesPath: 'data/profiles.json',
-    embeddingsCachePath: 'data/embeddings_cache.json',
-    indexPath: 'data/index.faiss',
-    profileIdMapPath: 'data/profile_id_map.json',
-    evalQueriesRawPath: 'data/eval_queries_raw.json',
-    evalQueriesPath: 'data/eval_queries.json',
-    evalResultsPath: 'data/eval_results.json',
+    embeddingsCachePath: 'data/generated/embeddings_cache.json',
+    indexPath: 'data/generated/index.faiss',
+    profileIdMapPath: 'data/generated/profile_id_map.json',
+    evalQueriesRawPath: 'data/eval/eval_queries_raw.json',
+    evalQueriesPath: 'data/eval/eval_queries.json',
+    evalResultsPath: 'data/generated/eval_results.json',
   },
   retry: {
     maxAttempts: 5,

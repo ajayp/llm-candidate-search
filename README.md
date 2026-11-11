@@ -145,12 +145,27 @@ Traditional search engines struggle with this—keyword search misses semantical
 |-----------|-----|
 | **HyDE Retrieval** (*have the LLM write a fake "ideal candidate" first, then search with that instead of the raw query*) | Resolves embedding asymmetry — the mismatch between how a short query and a long profile land in vector space; transforms short queries into profile-shaped documents to maximize recall before reranking. |
 | **FAISS Exact Search (`IndexFlatL2`)** | Deliberately not ANN (*approximate nearest-neighbor search — trades a little accuracy for a lot of speed at huge scale*). At 724 profiles, brute-force cosine search is sub-millisecond with zero recall loss. Approximate indexing (IVF/IVFPQ) only pays off once brute-force becomes too slow — millions of vectors, not hundreds — so it's the wrong tool to reach for at this scale. |
+| **Rule-Based ABM Filter (seniority/location)** | Neither FAISS nor general-purpose embeddings can reliably handle discrete attributes like seniority or location — enforced instead as an explicit post-retrieval rule (`matchesSeniority`/`matchesLocation` in `retrieval.ts`). See [Why the Filter Is Rule-Based, Not Embedded in Search](#why-the-abm-filter-is-rule-based-not-embedded-in-search) below. |
 | **Cohere Reranker** | Utilizes a cross-encoder (*a slower, more accurate model that reads the query and candidate together, rather than comparing pre-computed vectors*) to compute deep, interactive qualification alignment far better than raw cosine similarity. |
 | **Ground Truth via Batch API** | Maximizes cost and time efficiency to generate a dense evaluation dataset for quantitative performance benchmarking. |
 | **Synthetic Dataset** | Allowed full control over skill, seniority, and location distributions to reliably stress-test edge cases. |
 | **512-dim at L1 / 3072-dim at L2** | Search time and index memory scale with embedding dimension regardless of exact-vs-approximate search. 512-dim keeps first-stage retrieval fast across large corpora; the full dimension is only applied at L2 where you're scoring a small top-N, not the entire index. |
 | **Term-Frequency Explainability (no LLM)** | A second "why this candidate" signal — which of a candidate's skills are statistically overrepresented in the retrieved pool vs. the full corpus — computed with plain term-frequency math, not a model call. Zero marginal cost, zero hallucination risk, sits alongside the LLM guard's explanation rather than replacing it. See [Distinguishing Skills](#distinguishing-skills-statistical-explainability-no-llm). |
 | **Deterministic, Shared Acronym Resolution** | A small static table (not an LLM judgment call) resolves unambiguous abbreviations (`K8s`→Kubernetes) and explicitly flags genuinely ambiguous ones (`TS`) as unresolved — used identically by Stage 1 and Stage 4 so the two can never silently disagree about what an abbreviation means. Does not resolve genuine ambiguity, only makes not-knowing consistent and visible. See [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix). |
+
+### Why the ABM Filter Is Rule-Based, Not Embedded in Search
+
+The rule-based ABM filter exists because neither FAISS nor embeddings can reliably handle discrete attributes like seniority or location. FAISS simply doesn't support metadata filtering, and even vector stores that do (e.g., Weaviate, Qdrant) can't fix the deeper issue: general-purpose embeddings don't encode attributes like "senior" or "London-based" in a separable way. Two "senior" candidates may be farther apart in embedding space than a "senior" and "staff" candidate, depending on how their profiles are written.
+
+Filtered ANN search also introduces correctness problems. Graph-based indexes (HNSW, IVF) build connectivity over the full dataset; applying a selective filter afterward can fragment the graph and return too few or incorrect neighbors. Qdrant [measured this directly](https://qdrant.tech/articles/filtered-vector-search-acorn/): filtering out ~96% of nodes at default `m=16` leaves under one surviving link per node on average, breaking traversal. Their fix is a payload-aware "Filterable HNSW" plus ACORN traversal.
+
+Using FAISS `IndexFlatL2` avoids all of these issues. Exact search returns the full, correct ranking every time, so applying seniority/location rules afterward is always safe. At the current scale (724 profiles), this tradeoff is intentional: exact search guarantees correctness, and the rule-based filter enforces attributes embeddings can't reliably represent. This stops being free once the corpus grows past brute-force range — see [Future Roadmap](#future-roadmap).
+
+### Location Hierarchy: City-Level Rules, Region-Level Limitation
+
+The rule-based location filter (`matchesLocation` in `retrieval.ts`) is only fully deterministic for exact-city queries. `CandidateProfile.location` stores just `{ city, country }` — there's no region field. So when Stage 1 resolves a query to a metro area instead of a city (e.g. *"Bay Area"* → `region: "San Francisco Bay Area"`, `city: null`), the rule filter has nothing to compare that region against: it checks `country` only and passes every same-country candidate through. Recognizing that Oakland, Berkeley, and San Jose all belong to "San Francisco Bay Area" isn't enforced as a rule at all — it's delegated to Stage 4's LLM guard prompt, which lists example member cities and asks the model to judge membership per candidate.
+
+That's a real gap against this table's own stated rationale for making location rule-based in the first place (embeddings and LLM judgment aren't reliable for discrete attributes) — region-level queries currently fall back to exactly the kind of LLM judgment the rule-based filter was built to avoid. In a production system this would be a solved, deterministic problem: geocode each profile's city to coordinates or a region ID at ingestion time (e.g. via a geocoding API or a static gazetteer like GeoNames), then enforce region membership at retrieval time with a fast indexed lookup — a `geo_distance` filter in Elasticsearch/OpenSearch, a PostGIS radius query, or a metadata filter on region ID in any vector store that supports one. None of that exists here; this PoC accepts the gap and documents it rather than hand-building a one-off Bay-Area lookup table.
 
 ---
 
@@ -217,13 +232,13 @@ flowchart TD
     + seniority &amp; location ABM filter
     600 → ~100 candidates"]
 
-    D --> E["[Stage 3] Reranking 🤖
+    D -->|"forks here — both paths run independently"| E["[Stage 3] Reranking 🤖
     ─────────────────────────
     Cohere cross-encoder scores
     deep candidate relevance
     ~100 → 25 candidates"]
 
-    D --> M["Distinguishing Skills 📊
+    D -->|"forks here — both paths run independently"| M["Distinguishing Skills 📊
     ─────────────────────────
     Term-frequency stats: ~100 retrieved
     candidates (foreground) vs. full
@@ -312,6 +327,7 @@ See the ["it also survives typos" example](#see-it-in-action) at the top of this
 
 - **Interactive clarification** — surface flagged-ambiguous terms back to the recruiter before running the rest of the pipeline (*"did you mean TypeScript or Time Series?"*), matching the real Hiring Assistant's "interactive UX" philosophy of resolving ambiguity with the human before large-scale execution. Requires an actual clarification loop — `scripts/search.ts` is currently one-shot, and `evaluate.ts` runs unattended with no human in the loop.
 - **A skill ontology/knowledge graph** — instead of a static two-way table (known-safe vs. known-expansion vs. ambiguous), a structured ontology could use surrounding query context (title, other required qualifications) to disambiguate with actual confidence — e.g. inferring "TS" likely means TypeScript when co-occurring with "React", or Time Series when co-occurring with "forecasting". This is the next PoC direction if the deterministic-table approach proves too coarse in practice.
+- **Domain-inferred expansion** — a cheaper middle ground between the static table and a full ontology: a low-cost LLM call classifies the query's domain (e.g. "software engineering" vs. "data science" vs. "finance") once per query, then a per-domain acronym table (cached in memory, built up over time) resolves abbreviations using that domain's conventions instead of one global table. Avoids hand-maintaining domain-specific tables up front, at the cost of an extra classification call and the same reliability caveats as any LLM judgment.
 
 ---
 
@@ -330,6 +346,10 @@ To move away from anecdotal validation, I built a controlled testing ecosystem:
 * **R@50 (Recall @ 50):** Measures the percentage of total qualified candidates captured in the top 50 results. This represents our pipeline's ceiling; if a candidate is missed here, a downstream reranker cannot save them.
 * **NDCG@10 (Normalized Discounted Cumulative Gain):** Evaluates ranking quality, ensuring the absolute best matches are heavily penalized if they do not appear at the very top of the recruiter's feed.
 
+### LLM-as-a-Judge Bias
+
+Ground-truth labels are LLM-generated (OpenAI Batch API / `evalGenerateQuick.ts`), and the pipeline being scored also runs OpenAI models throughout — a known, unmitigated limitation of LLM-as-a-judge evaluation worth flagging rather than presenting these numbers as judged by an independent standard.
+
 ---
 
 ## Future Roadmap
@@ -341,6 +361,8 @@ To move away from anecdotal validation, I built a controlled testing ecosystem:
 | HyDE generation latency cost | Learned query encoder / distillation |
 | Synthetic profiles | Anonymized production-grade profiles |
 | Static acronym table + ambiguity flagging | Skill ontology / knowledge graph for context-aware disambiguation, or interactive recruiter clarification (see [Acronym Handling](#acronym-handling-a-documented-limitation-not-a-fix)) |
+| City/country-only location field, region matching delegated to Stage 4's LLM guard | Geocoded profiles (coordinates or region ID) + deterministic regional lookup at retrieval time — e.g. `geo_distance` filtering in Elasticsearch/OpenSearch, a PostGIS radius query, or a gazetteer-backed region ID (see [Location Hierarchy](#location-hierarchy-city-level-rules-region-level-limitation)) |
+| Brute-force exact search (`IndexFlatL2`, `O(n·d)` per query) | Approximate index (`IndexIVFFlat` or `IndexHNSWFlat`) once corpus grows past the tens-of-thousands range — flat search is exact and fast enough at 724 profiles, but doesn't scale to millions without recall tuning against the eval harness |
 
 ---
 
@@ -403,16 +425,18 @@ scripts/
   evalGenerate.ts   # generate ground-truth labels via Batch API
 data/
   profiles.json             # 724 synthetic profiles (committed)
-  embeddings_cache.json     # OpenAI embedding vectors for all profiles — 3072-dim floats per profile,
-                            # cached to disk so re-runs don't re-call the API (67MB, not committed)
-  index.faiss               # serialized FAISS exact-search (IndexFlatL2) index built from the 512-dim slice of each
-                            # embedding — what gets searched at query time (committed)
-  profile_id_map.json       # maps FAISS index positions → profile IDs (committed)
-  eval_queries_raw.json     # the 20 hardcoded recruiter query strings (committed)
-  eval_queries.json         # ground-truth relevance labels: for each query, which profile IDs are
+  eval/                      # eval query set + ground-truth labels, committed
+    eval_queries_raw.json   # the 20 hardcoded recruiter query strings
+    eval_queries.json       # ground-truth relevance labels: for each query, which profile IDs are
                             # qualified — generated by asking an LLM to judge all 724 profiles
-                            # against each query via OpenAI Batch API (committed)
-  eval_results.json         # output from the last evaluate run — per-query NDCG@10, R@10, R@50
+                            # against each query via OpenAI Batch API
+  generated/                # build artifacts, gitignored — rebuilt via `npm run index` after cloning
+    embeddings_cache.json   # OpenAI embedding vectors for all profiles — 3072-dim floats per profile,
+                            # cached to disk so re-runs don't re-call the API (67MB)
+    index.faiss             # serialized FAISS exact-search (IndexFlatL2) index built from the 512-dim slice of each
+                            # embedding — what gets searched at query time
+    profile_id_map.json     # maps FAISS index positions → profile IDs
+    eval_results.json       # output from the last evaluate run — per-query NDCG@10, R@10, R@50
 ```
 
 ---

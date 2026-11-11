@@ -22,16 +22,13 @@ logs
 *.tsbuildinfo
 
 
-# Generated data files (committed after one-time generation)
-data/embeddings_cache.json
-data/index.faiss
-data/profile_id_map.json
-data/eval_results.json
+# Generated data files (rebuilt via `npm run index` / `npm run evaluate`, not committed)
+data/generated/
 
 # Keep these committed:
 # data/profiles.json
-# data/eval_queries_raw.json
-# data/eval_queries.json
+# data/eval/eval_queries_raw.json
+# data/eval/eval_queries.json
 
 
 

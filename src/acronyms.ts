@@ -1,5 +1,7 @@
-// Deterministic acronym handling, shared by Stage 1 (query understanding) and Stage 4 (guard),
-// so the two never silently disagree about what an abbreviation means.
+// Deterministic acronym handling, resolved once in Stage 1 (query understanding). The resolved
+// text and ambiguous-abbreviation flags flow downstream into the Stage 4 guard prompt via
+// StructuredQuery, so the two stages never silently disagree about what an abbreviation means —
+// guard does not call this module directly.
 
 // Only genuinely unambiguous mappings belong here — if there's any plausible second meaning,
 // it does not belong in this table (see KNOWN_SAFE_ACRONYMS and the ambiguous fallback instead).
